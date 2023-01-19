@@ -69,7 +69,7 @@ export class BetJetton implements Contract {
         totalValue?: bigint
     }>) {
         await provider.internal(via, {
-            value: params?.totalValue ?? params?.value + toNano('0.03'),
+            value: params?.totalValue ?? params?.value + toNano('0.05'),
             body: beginCell()
                 .storeUint(21, 32) // op
                 .storeUint(0, 64) // query id

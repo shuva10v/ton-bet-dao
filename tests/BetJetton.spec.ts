@@ -29,6 +29,7 @@ describe('BET Jetton', () => {
         // user going to wrap TON to BET
         const user1 = await bundle.blkch.treasury("user1")
         const wrapRequest = await jettonMaster.sendWrap(user1.getSender(), {value: toNano('3.0')})
+        console.log(wrapRequest.transactions.map(t => t.description))
         expectTransactionsValid(wrapRequest)
 
         const wallet = await bundle.betWallet(user1.address)
@@ -38,11 +39,10 @@ describe('BET Jetton', () => {
             to: wallet.address
         })
         // transfer_notification
-        // TODO - add support for transfer notification
-        // expect(wrapRequest.transactions).toHaveTransaction({
-        //     from: wallet.address,
-        //     to: user1.address
-        // })
+        expect(wrapRequest.transactions).toHaveTransaction({
+            from: wallet.address,
+            to: user1.address
+        })
         
         const metadata = await jettonMaster.getJettonData();
         expect(metadata.totalSupply).toBe(toNano('3.0'))

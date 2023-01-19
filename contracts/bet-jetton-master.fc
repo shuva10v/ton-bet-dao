@@ -8,10 +8,10 @@
 ;;~= 0.01 TON
 int gas_consumption() asm "10000000 PUSHINT";
 
-;;~= 0.01 TON
-int mint_amount() asm "10000000 PUSHINT";
+;;~= 0.025 TON
+int mint_amount() asm "30000000 PUSHINT";
 ;; 0.001 TON
-int mint_forward_payload() asm "0 PUSHINT";
+int mint_forward_payload() asm "10000000 PUSHINT";
 
 int op::provide_wallet_address() asm "0x2c76b973 PUSHINT";
 int op::take_wallet_address() asm "0xd1735400 PUSHINT";
@@ -86,7 +86,8 @@ int is_resolvable?(slice addr) inline {
     if (op == op::mint()) {
         slice to_address = sender_address;
         int jetton_amount = in_msg_body~load_coins();
-        throw_unless(75, msg_value > fwd_fee + gas_consumption() + jetton_amount + mint_forward_payload());
+        raw_reserve(total_supply + jetton_amount, 0);
+        throw_unless(75, msg_value > fwd_fee + gas_consumption() + jetton_amount + mint_amount());
 
         var master_msg = begin_cell()
                 .store_uint(op::internal_transfer(), 32)
