@@ -1,5 +1,9 @@
-import {Cell} from "ton-core";
+import {Address, beginCell, Cell, SendMode, toNano} from "ton-core";
 import {SourceEntry, SourcesArray} from "@ton-community/func-js";
+import {Blockchain, OpenedContract} from "@ton-community/sandbox";
+import {BetJetton} from "./BetJetton";
+import {expectTransactionsValid} from "./test-utils";
+import {BetJettonWallet} from "./BetJettonWallet";
 
 const { compileFunc } = require("@ton-community/func-js");
 const fs = require('fs').promises;
@@ -38,5 +42,46 @@ export class BetDaoContracts {
             throw new Error("Unable to compile code");
         }
         return Cell.fromBoc(Buffer.from(result.codeBoc, "base64"))[0];
+    }
+}
+
+export class ContractsBundle {
+    private static instance: ContractsBundle
+
+    public blkch
+    public minter
+    public betJettonMaster
+
+    private constructor() {
+    }
+
+    private async init() {
+        this.blkch = await Blockchain.create();
+        // account used to deploy smart contracts
+        this.minter = await this.blkch.treasury('minter')
+        // BET Jetton master smart-contract
+        this.betJettonMaster = this.blkch.openContract(new BetJetton(0,  await BetDaoContracts.betJettonMaster(), {
+            owner: this.minter.address,
+            metadataUrl: "https://ipfs-url",
+            jettonWalletCode: await BetDaoContracts.betJettonWallet()
+        }))
+        const deployResult = await this.betJettonMaster.sendDeploy(this.minter.getSender(), {
+            init: this.betJettonMaster.init,
+        })
+        expectTransactionsValid(deployResult)
+        expect((await this.blkch.getContract(this.betJettonMaster.address)).accountState?.type).toBe('active')
+    }
+
+    async betWallet(owner: Address): Promise<OpenedContract<BetJettonWallet>> {
+        const walletAddress = await this.betJettonMaster.getWalletAddress(owner)
+        return this.blkch.openContract(new BetJettonWallet(walletAddress))
+    }
+
+    static async get(): Promise<ContractsBundle> {
+        if (this.instance === undefined) {
+            this.instance = new ContractsBundle()
+            await this.instance.init()
+        }
+        return this.instance
     }
 }

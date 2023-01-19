@@ -1,7 +1,18 @@
-import {Address, beginCell, Cell, Contract, contractAddress, ContractProvider} from "ton-core";
+import {
+    Address,
+    beginCell,
+    Cell,
+    Contract,
+    contractAddress,
+    ContractProvider,
+    Sender,
+    Slice,
+    storeStateInit,
+    toNano
+} from "ton-core";
 
 export type BetJettonData = {
-    totalSupply: number
+    totalSupply: bigint
     mintable: number
     owner: Address
     content: Cell
@@ -29,10 +40,23 @@ export class BetJetton implements Contract {
         this.address = contractAddress(workchain, this.init)
     }
 
+    async sendDeploy(provider: ContractProvider, via: Sender) {
+        await provider.internal(via, {
+            value: toNano('1.0'),
+            body: new Cell()
+        })
+        return contractAddress(0, this.init)
+    }
+
+    async getBalance(provider: ContractProvider): Promise<bigint> {
+        const state = await provider.getState()
+        return state.balance
+    }
+
     async getJettonData(provider: ContractProvider): Promise<BetJettonData> {
         const { stack } = await provider.get('get_jetton_data', [])
         return {
-            totalSupply: stack.readNumber(),
+            totalSupply: stack.readBigNumber(),
             mintable: stack.readNumber(),
             owner: stack.readAddress(),
             content: stack.readCell(),
@@ -40,4 +64,24 @@ export class BetJetton implements Contract {
         }
     }
 
+    async sendWrap(provider: ContractProvider, via: Sender, params?: Partial<{
+        value: bigint,
+        totalValue?: bigint
+    }>) {
+        await provider.internal(via, {
+            value: params?.totalValue ?? params?.value + toNano('0.03'),
+            body: beginCell()
+                .storeUint(21, 32) // op
+                .storeUint(0, 64) // query id
+                .storeCoins(params?.value)
+                .endCell()
+        })
+        return 0
+    }
+
+    async getWalletAddress(provider: ContractProvider, address: Address): Promise<Address> {
+        const { stack } = await provider.get('get_wallet_address', [{ type: 'slice',
+            cell: beginCell().storeAddress(address).endCell()}])
+        return stack.readAddress();
+    }
 }

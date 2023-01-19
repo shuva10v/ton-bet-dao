@@ -13,6 +13,11 @@ backed by TON coin (like WTON).
 
 ## Running tests
 
+``
+npm i
+npm test
+``
+
 ## Deploy
 
 TODO

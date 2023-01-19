@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "es2020"
+    ],
+    "module": "commonjs",
+    "target": "es2020",
+  },
+  "files": ["node_modules/jest-expect-message/types/index.d.ts"]
+}
