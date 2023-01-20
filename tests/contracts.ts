@@ -1,4 +1,4 @@
-import {Address, beginCell, Cell, SendMode, toNano} from "ton-core";
+import {Address, beginCell, Cell, ContractProvider, SendMode, toNano} from "ton-core";
 import {SourceEntry, SourcesArray} from "@ton-community/func-js";
 import {Blockchain, OpenedContract} from "@ton-community/sandbox";
 import {BetJetton} from "./BetJetton";
@@ -76,11 +76,21 @@ export class ContractsBundle {
         const walletAddress = await this.betJettonMaster.getWalletAddress(owner)
         return this.blkch.openContract(new BetJettonWallet(walletAddress))
     }
+    
+    async balance(address: Address): Promise<bigint> {
+        const ctr = await this.blkch.getContract(address)
+        return ctr.account?.account?.storage?.balance?.coins
+    }
+
+    static async create(): Promise<ContractsBundle> {
+        const instance = new ContractsBundle()
+        await instance.init()
+        return instance;
+    }
 
     static async get(): Promise<ContractsBundle> {
         if (this.instance === undefined) {
-            this.instance = new ContractsBundle()
-            await this.instance.init()
+            this.instance = await this.create()
         }
         return this.instance
     }

@@ -65,15 +65,15 @@ export class BetJetton implements Contract {
     }
 
     async sendWrap(provider: ContractProvider, via: Sender, params?: Partial<{
-        value: bigint,
+        amount: bigint,
         totalValue?: bigint
     }>) {
         await provider.internal(via, {
-            value: params?.totalValue ?? params?.value + toNano('0.05'),
+            value: params?.totalValue ?? params?.amount + toNano('0.05'),
             body: beginCell()
                 .storeUint(21, 32) // op
                 .storeUint(0, 64) // query id
-                .storeCoins(params?.value)
+                .storeCoins(params?.amount)
                 .endCell()
         })
         return 0
