@@ -1,6 +1,7 @@
 #pragma version >=0.2.0;
 #include "stdlib.fc";
 #include "bet-jetton-utils.fc";
+#include "utils.fc";
 ;; based on https://github.com/ton-blockchain/token-contract/blob/main/ft/jetton-wallet.fc
 
 ;; Jetton Wallet Smart Contract

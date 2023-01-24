@@ -39,7 +39,7 @@ export class BetJettonWallet implements Contract {
     async sendTransfer(provider: ContractProvider, via: Sender, params?: Partial<{
         amount: bigint,
         destination: Address,
-        responseDestination: Address,
+        responseDestination?: Address,
         forwardTonAmount?: bigint
         forwardPayload?: Cell
         totalValue?: bigint

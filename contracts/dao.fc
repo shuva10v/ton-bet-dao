@@ -1,0 +1,159 @@
+#pragma version >=0.2.0;
+#include "stdlib.fc";
+#include "bet-jetton-utils.fc";
+#include "utils.fc";
+
+
+;;; Main DAO contract, used to deploy items and deal with GOV tokens
+;;; level0  - no args
+;;; level1  - level0
+;;; level2  - level1, level0
+;;; level3  - level0
+
+int op::dao::buy_entity() asm "0x0bf9fca0 PUSHINT";
+
+;;; TODO
+int gas_consumption() asm "10000000 PUSHINT"; ;; 0.01 TON
+
+;; Data layout:
+;;
+;;
+
+global int storage::entities::level0_price;
+global int storage::entities::level1_price;
+global int storage::entities::level2_price;
+global int storage::entities::level3_price;
+global int storage::nft::next_item_index;
+global cell storage::nft::nft_entity_code;
+global cell storage::nft::collection_content;
+global slice storage::dao::owner;
+
+() load_data() impure {
+    slice ds = get_data().begin_parse();
+    storage::entities::level0_price = ds~load_coins();
+    storage::entities::level1_price = ds~load_coins();
+    storage::entities::level2_price = ds~load_coins();
+    storage::entities::level3_price = ds~load_coins();
+    storage::nft::next_item_index = ds~load_uint(32);
+    storage::dao::owner = ds~load_msg_addr();
+    storage::nft::nft_entity_code = ds~load_ref();
+    storage::nft::collection_content = ds~load_ref();
+}
+
+() save_data() impure inline_ref {
+    set_data(begin_cell()
+            .store_coins(storage::entities::level0_price)
+            .store_coins(storage::entities::level1_price)
+            .store_coins(storage::entities::level2_price)
+            .store_coins(storage::entities::level3_price)
+            .store_uint(storage::nft::next_item_index, 32)
+            .store_slice(storage::dao::owner)
+            .store_ref(storage::nft::nft_entity_code)
+            .store_ref(storage::nft::collection_content)
+    .end_cell());
+}
+
+slice calculate_nft_item_address(cell state_init) {
+    return begin_cell().store_uint(4, 3)
+            .store_int(workchain(), 8)
+            .store_uint(cell_hash(state_init), 256)
+            .end_cell()
+            .begin_parse();
+}
+
+cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
+    cell data = begin_cell().store_uint(item_index, 64).store_slice(my_address()).end_cell();
+    return begin_cell().store_uint(0, 2).store_dict(nft_item_code).store_dict(data).store_uint(0, 1).end_cell();
+}
+
+() deploy_nft_item(int item_index, cell nft_item_code, int amount, cell nft_content) impure {
+    cell state_init = calculate_nft_item_state_init(item_index, nft_item_code);
+    slice nft_address = calculate_nft_item_address(state_init);
+    var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(nft_address)
+            .store_coins(amount)
+            .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+            .store_ref(state_init)
+            .store_ref(nft_content);
+    send_raw_message(msg.end_cell(), 1); ;; pay transfer fees separately, revert on errors
+}
+
+() recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+        return ();
+    }
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+    slice sender_address = cs~load_msg_addr();
+    cs~load_msg_addr(); ;; skip dst
+    cs~load_coins(); ;; skip value
+    cs~skip_bits(1); ;; skip extracurrency collection
+    cs~load_coins(); ;; skip ihr_fee
+    int fwd_fee = muldiv(cs~load_coins(), 3, 2); ;; we use message fwd_fee for estimation of forward_payload costs
+
+    int op = in_msg_body~load_uint(32);
+    int query_id = in_msg_body~load_uint(64);
+
+    load_data();
+
+    if (op == op::transfer_notification()) {
+        throw_unless(75, msg_value > fwd_fee + gas_consumption());
+        int bet_amount = in_msg_body~load_coins();
+        slice owner = in_msg_body~load_msg_addr();
+        slice forward_payload = in_msg_body;
+        int in_ref = in_msg_body~load_uint(1);
+        if (in_ref) {
+            forward_payload = in_msg_body~load_ref().begin_parse();
+        }
+        int dao_op = forward_payload~load_uint(32);
+        if (dao_op == op::dao::buy_entity()) {
+            int level = forward_payload~load_uint(4);
+            int itemIndex = forward_payload~load_uint(32);
+            ;;; to avoid race condition and to make it possible to get NFT item address by sender
+            throw_unless(80, itemIndex == storage::nft::next_item_index);
+            int deploy_amount_ton = forward_payload~load_coins();
+            cell name = forward_payload~load_ref();
+            slice parent_level0 = null();
+            slice parent_level1 = null();
+            if (level != 0) {
+                parent_level0 = forward_payload~load_msg_addr();
+            }
+            if (level == 2) {
+                parent_level1 = forward_payload~load_msg_addr();
+            }
+
+            cell nft_content = begin_cell()
+                    .store_slice(owner)
+                    .store_ref(name)
+                    .end_cell();
+            deploy_nft_item(storage::nft::next_item_index, storage::nft::nft_entity_code,
+                    deploy_amount_ton, nft_content);
+            storage::nft::next_item_index += 1;
+            save_data();
+            return ();
+        }
+        throw(1001); ;; dao op not supported
+
+        return ();
+    }
+
+    throw(0xffff);
+}
+
+(int, cell, slice) get_collection_data() method_id {
+    load_data();
+    return (storage::nft::next_item_index, storage::nft::collection_content, storage::dao::owner);
+}
+
+slice get_nft_address_by_index(int index) method_id {
+    load_data();
+    cell state_init = calculate_nft_item_state_init(index, storage::nft::nft_entity_code);
+    return calculate_nft_item_address(state_init);
+}
+
+

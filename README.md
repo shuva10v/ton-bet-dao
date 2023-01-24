@@ -18,7 +18,29 @@ burn#595f07bc query_id:uint64 amount:(VarUInteger 16)
 
 ### GOV jetton
 
-### NFT event item?
+### DAO
+
+DAO main contract holds configuration and allows to buy (mint) NFT entities using BET jetton.
+NFT entity price depends on it level.
+
+### NFT entities
+
+NFT entities has 4 levels. 0 level has no dependencies, other levels depends on 0 level NFT entity. Also
+2 level entities has link to 1 level entity.
+
+```
+ 0-level NFT <---------\
+     ^                 |
+     |                 |
+1-level NFT            |
+     ^                 |
+     |                 |
+2-level  NFT           |
+                       |
+                       |
+                  3-level NFT
+      
+```
 
 ## Running tests
 

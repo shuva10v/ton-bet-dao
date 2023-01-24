@@ -9,7 +9,7 @@ describe('BET Jetton', () => {
     test('should return off-chain metadata', async () => {
         const bundle = await ContractsBundle.get()
 
-        const metadata = await bundle.betJettonMaster.getJettonData();
+        const metadata = await bundle.betJettonMaster.getJettonData()
         expect(metadata.mintable).toBe(-1)
         expect(metadata.totalSupply).toBe(0n)
         expect(metadata.content?.equals(beginCell().storeUint(1, 8)
@@ -45,7 +45,7 @@ describe('BET Jetton', () => {
             to: user1.address
         })
         
-        let metadata = await jettonMaster.getJettonData();
+        let metadata = await jettonMaster.getJettonData()
         expect(metadata.totalSupply).toBe(toNano('3.0'))
         let lockedTons = await bundle.balance(jettonMaster.address) - startBalance
         expect(lockedTons).toBeGreaterThan(toNano("3.0"))

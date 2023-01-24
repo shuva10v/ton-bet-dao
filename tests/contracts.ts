@@ -4,6 +4,8 @@ import {Blockchain, OpenedContract} from "@ton-community/sandbox";
 import {BetJetton} from "./BetJetton";
 import {expectTransactionsValid} from "./test-utils";
 import {BetJettonWallet} from "./BetJettonWallet";
+import {Dao} from "./Dao";
+import {NFTEntity} from "./NFTEntity";
 
 const { compileFunc } = require("@ton-community/func-js");
 const fs = require('fs').promises;
@@ -14,7 +16,8 @@ export class BetDaoContracts {
         return await BetDaoContracts.compile([
                 await BetDaoContracts.readFile('bet-jetton-master.fc'),
                 await BetDaoContracts.readFile('stdlib.fc'),
-                await BetDaoContracts.readFile('bet-jetton-utils.fc')
+                await BetDaoContracts.readFile('bet-jetton-utils.fc'),
+                await BetDaoContracts.readFile('utils.fc')
             ]);
     }
 
@@ -22,7 +25,25 @@ export class BetDaoContracts {
         return await BetDaoContracts.compile([
             await BetDaoContracts.readFile('bet-jetton-wallet.fc'),
             await BetDaoContracts.readFile('stdlib.fc'),
-            await BetDaoContracts.readFile('bet-jetton-utils.fc')
+            await BetDaoContracts.readFile('bet-jetton-utils.fc'),
+            await BetDaoContracts.readFile('utils.fc')
+        ]);
+    }
+
+    static async nftEntity(): Promise<Cell> {
+        return await BetDaoContracts.compile([
+            await BetDaoContracts.readFile('nft-entity.fc'),
+            await BetDaoContracts.readFile('stdlib.fc'),
+            await BetDaoContracts.readFile('utils.fc'),
+        ]);
+    }
+
+    static async dao(): Promise<Cell> {
+        return await BetDaoContracts.compile([
+            await BetDaoContracts.readFile('dao.fc'),
+            await BetDaoContracts.readFile('stdlib.fc'),
+            await BetDaoContracts.readFile('bet-jetton-utils.fc'),
+            await BetDaoContracts.readFile('utils.fc'),
         ]);
     }
 
@@ -51,6 +72,7 @@ export class ContractsBundle {
     public blkch
     public minter
     public betJettonMaster
+    public dao
 
     private constructor() {
     }
@@ -65,16 +87,29 @@ export class ContractsBundle {
             metadataUrl: "https://ipfs-url",
             jettonWalletCode: await BetDaoContracts.betJettonWallet()
         }))
-        const deployResult = await this.betJettonMaster.sendDeploy(this.minter.getSender(), {
-            init: this.betJettonMaster.init,
-        })
+        let deployResult = await this.betJettonMaster.sendDeploy(this.minter.getSender())
         expectTransactionsValid(deployResult)
         expect((await this.blkch.getContract(this.betJettonMaster.address)).accountState?.type).toBe('active')
+
+        // DAO smart contract
+        this.dao = this.blkch.openContract(new Dao(0,  await BetDaoContracts.dao(), {
+            owner: this.minter.address,
+            metadataUrl: "https://ipfs-url/dao",
+            nftEntityCode: await BetDaoContracts.nftEntity()
+        }))
+        deployResult = await this.dao.sendDeploy(this.minter.getSender())
+        expectTransactionsValid(deployResult)
+        expect((await this.blkch.getContract(this.dao.address)).accountState?.type).toBe('active')
     }
 
     async betWallet(owner: Address): Promise<OpenedContract<BetJettonWallet>> {
         const walletAddress = await this.betJettonMaster.getWalletAddress(owner)
         return this.blkch.openContract(new BetJettonWallet(walletAddress))
+    }
+
+    async nftEntity(index: bigint): Promise<OpenedContract<NFTEntity>> {
+        const nftAddress = await this.dao.getNftAddress(index)
+        return this.blkch.openContract(new NFTEntity(nftAddress))
     }
     
     async balance(address: Address): Promise<bigint> {
