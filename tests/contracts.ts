@@ -1,6 +1,6 @@
 import {Address, beginCell, Cell, ContractProvider, SendMode, toNano} from "ton-core";
 import {SourceEntry, SourcesArray} from "@ton-community/func-js";
-import {Blockchain, OpenedContract} from "@ton-community/sandbox";
+import {Blockchain, OpenedContract, TreasuryContract} from "@ton-community/sandbox";
 import {BetJetton} from "./BetJetton";
 import {expectTransactionsValid} from "./test-utils";
 import {BetJettonWallet} from "./BetJettonWallet";
@@ -105,6 +105,11 @@ export class ContractsBundle {
     async betWallet(owner: Address): Promise<OpenedContract<BetJettonWallet>> {
         const walletAddress = await this.betJettonMaster.getWalletAddress(owner)
         return this.blkch.openContract(new BetJettonWallet(walletAddress))
+    }
+
+    async addBetToUser(user: OpenedContract<TreasuryContract>, amount: bigint): Promise<OpenedContract<BetJettonWallet>> {
+        await this.betJettonMaster.sendWrap(user.getSender(), {amount: amount})
+        return await this.betWallet(user.address)
     }
 
     async nftEntity(index: bigint): Promise<OpenedContract<NFTEntity>> {

@@ -18,7 +18,7 @@ describe('DAO', () => {
         const user1Wallet = await bundle.betWallet(user1.address)
         expect((await user1Wallet.getData()).balance).toBe(toNano('2000.0'))
         const daoWallet = await bundle.betWallet(dao.address)
-        const collectionData = await dao.getCollectionData()
+        let collectionData = await dao.getCollectionData()
         expect(collectionData.owner?.equals(bundle.minter.address)).toBeTruthy()
         expect(collectionData.nextItemIndex).toBe(0n);
 
@@ -53,6 +53,9 @@ describe('DAO', () => {
         // TODO add support for semi-chain content layout
         expect(nftData.individualContent.beginParse().loadStringTail()).toBe("Football")
 
+        collectionData = await dao.getCollectionData()
+        expect(collectionData.nextItemIndex).toBe(1n);
+
 
         // 1000 BET have been transferred to DAO contract
         expect((await daoWallet.getData()).balance).toBe(toNano('1000.0'))
@@ -84,7 +87,30 @@ describe('DAO', () => {
     })
 
     test('should allow NFT transfers', async () => {
-        // TODO
+        const bundle = await ContractsBundle.create()
+        const user1 = await bundle.blkch.treasury("user1")
+        const user2 = await bundle.blkch.treasury("user2")
+        const user1Wallet = await bundle.addBetToUser(user1, toNano('2000'))
+
+        await user1Wallet.sendTransfer(user1.getSender(), {
+            amount: toNano("1000.0"), // default price
+            destination: bundle.dao.address,
+            totalValue: toNano("0.1"),
+            forwardTonAmount: toNano("0.05"),
+            forwardPayload: bundle.dao.buyEntityPayload(NFTEntityLevel.Level0, "Football", 0n)
+        })
+
+        const nftEntity = await bundle.nftEntity(0n);
+        let nftData = await nftEntity.getData()
+        expect(nftData.ownerAddress?.equals(user1.address)).toBeTruthy()
+
+        const transferRes = await nftEntity.sendTransfer(user1.getSender(), {
+            destination: user2.address
+        })
+        expectTransactionsValid(transferRes)
+
+        nftData = await nftEntity.getData()
+        expect(nftData.ownerAddress?.equals(user2.address)).toBeTruthy()
     })
 
     test('should allow editing metadata', async () => {
