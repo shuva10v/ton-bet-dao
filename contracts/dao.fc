@@ -118,6 +118,7 @@ cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
             throw_unless(80, itemIndex == storage::nft::next_item_index);
             int deploy_amount_ton = forward_payload~load_coins();
             cell name = forward_payload~load_ref();
+            cell uri = forward_payload~load_ref();
             slice parent_level0 = null();
             slice parent_level1 = null();
             if (level != 0) {
@@ -130,6 +131,7 @@ cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
             cell nft_content = begin_cell()
                     .store_slice(owner)
                     .store_ref(name)
+                    .store_ref(uri)
                     .end_cell();
             deploy_nft_item(storage::nft::next_item_index, storage::nft::nft_entity_code,
                     deploy_amount_ton, nft_content);

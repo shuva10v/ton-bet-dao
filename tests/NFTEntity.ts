@@ -8,7 +8,11 @@ export type NFTEntityData = {
     individualContent: Cell
 }
 
+
 export class NFTEntity implements Contract {
+    static METADATA_KEY_URI = 51065135818459385347574250312853146822620586594996463797054414300406918686668n;
+    static METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894456860693970539822503415433n;
+
     constructor(readonly address: Address) {}
 
     async getData(provider: ContractProvider): Promise<NFTEntityData> {

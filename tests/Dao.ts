@@ -61,18 +61,25 @@ export class Dao implements Contract {
         return contractAddress(0, this.init)
     }
 
-    buyEntityPayload(level: NFTEntityLevel, name: string, itemIndex: bigint,
-                     deployAmountTon: bigint = toNano('0.05'),
-                     parentLevel0: Address = undefined,
-                     parentLevel1: Address = undefined): Cell {
+    buyEntityPayload(params: Partial<{
+        level: NFTEntityLevel
+        name: string
+        uri?: string
+        itemIndex: bigint
+        deployAmountTon?: bigint
+        parentLevel0?: Address
+        parentLevel1?: Address
+        }>): Cell {
         const builder = beginCell().storeUint(0x0bf9fca0, 32) // op::dao::buy_entity()
-            .storeUint(level.valueOf(), 4).storeUint(itemIndex, 32)
-            .storeCoins(deployAmountTon).storeStringRefTail(name)
-        if (level != NFTEntityLevel.Level0) {
-            builder.storeAddress(parentLevel0)
+            .storeUint(params?.level.valueOf(), 4).storeUint(params?.itemIndex, 32)
+            .storeCoins(params?.deployAmountTon ?? toNano('0.04'))
+            .storeStringRefTail(params?.name)
+            .storeStringRefTail(params?.uri ?? "")
+        if (params?.level != NFTEntityLevel.Level0) {
+            builder.storeAddress(params?.parentLevel0)
         }
-        if (level == NFTEntityLevel.Level2) {
-            builder.storeAddress(parentLevel1)
+        if (params?.level == NFTEntityLevel.Level2) {
+            builder.storeAddress(params?.parentLevel1)
         }
 
         return builder.endCell()

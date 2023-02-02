@@ -1,11 +1,11 @@
 import {BetJetton} from "./BetJetton";
 import {BetDaoContracts, ContractsBundle} from "./contracts";
-import {Address, beginCell, toNano} from "ton-core";
+import {Address, beginCell, Dictionary, toNano} from "ton-core";
 import * as util from "util";
 import {expectTransactionsValid} from "./test-utils";
 import "@ton-community/test-utils"
 import {NFTEntityLevel} from "./Dao";
-import {NFTEntity} from "./NFTEntity"; // register matchers
+import {NFTEntity} from "./NFTEntity";
 
 describe('DAO', () => {
     test('should sell NFT entity', async () => {
@@ -31,8 +31,12 @@ describe('DAO', () => {
             destination: dao.address,
             totalValue: toNano("0.1"),
             forwardTonAmount: toNano("0.05"),
-            forwardPayload: bundle.dao.buyEntityPayload(NFTEntityLevel.Level0, "Football",
-                collectionData.nextItemIndex)
+            forwardPayload: bundle.dao.buyEntityPayload({
+                    level: NFTEntityLevel.Level0,
+                    name: "Football",
+                    uri: "ipfs://default_metadata_value",
+                    itemIndex: collectionData.nextItemIndex
+                })
         })
         expectTransactionsValid(transferResult)
         expect(transferResult.transactions).toHaveLength(5)
@@ -50,8 +54,16 @@ describe('DAO', () => {
         expect(nftData.init).toBeTruthy()
         expect(nftData.index).toBe(0n)
         expect(nftData.ownerAddress?.equals(user1.address)).toBeTruthy()
-        // TODO add support for semi-chain content layout
-        expect(nftData.individualContent.beginParse().loadStringTail()).toBe("Football")
+
+        expect(nftData.individualContent.beginParse().loadUint(8)).toBe(0); // on-chain layout
+        const dict = nftData.individualContent.beginParse().loadRef().beginParse()
+            .loadDictDirect(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        const uri = dict.get(NFTEntity.METADATA_KEY_URI);
+        const name = dict.get(NFTEntity.METADATA_KEY_NAME);
+        expect(uri).toBeDefined()
+        expect(name).toBeDefined()
+        expect(name.beginParse().loadStringTail()).toBe("Football")
+        expect(uri.beginParse().loadStringTail()).toBe("ipfs://default_metadata_value")
 
         collectionData = await dao.getCollectionData()
         expect(collectionData.nextItemIndex).toBe(1n);
@@ -77,8 +89,12 @@ describe('DAO', () => {
             destination: dao.address,
             totalValue: toNano("0.1"),
             forwardTonAmount: toNano("0.05"),
-            forwardPayload: bundle.dao.buyEntityPayload(NFTEntityLevel.Level0, "Football",
-                collectionData.nextItemIndex + 100n) // wrong item index
+            forwardPayload: bundle.dao.buyEntityPayload({
+                    level: NFTEntityLevel.Level0,
+                    name: "Football",
+                    uri: "ipfs://default_metadata_value",
+                    itemIndex: collectionData.nextItemIndex + 100n  // wrong item index
+                })
         })
         expect(transferResult.transactions).toHaveTransaction({
             aborted: true,
@@ -97,7 +113,11 @@ describe('DAO', () => {
             destination: bundle.dao.address,
             totalValue: toNano("0.1"),
             forwardTonAmount: toNano("0.05"),
-            forwardPayload: bundle.dao.buyEntityPayload(NFTEntityLevel.Level0, "Football", 0n)
+            forwardPayload: bundle.dao.buyEntityPayload({
+                    level: NFTEntityLevel.Level0,
+                    name: "Football",
+                    itemIndex: 0n  // wrong item index
+                })
         })
 
         const nftEntity = await bundle.nftEntity(0n);
