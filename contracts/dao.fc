@@ -119,19 +119,29 @@ cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
             int deploy_amount_ton = forward_payload~load_coins();
             cell name = forward_payload~load_ref();
             cell uri = forward_payload~load_ref();
+            builder parents = begin_cell();
             slice parent_level0 = null();
             slice parent_level1 = null();
             if (level != 0) {
                 parent_level0 = forward_payload~load_msg_addr();
+                parents = parents.store_slice(parent_level0);
             }
             if (level == 2) {
                 parent_level1 = forward_payload~load_msg_addr();
+                parents = parents.store_slice(parent_level1);
             }
 
             cell nft_content = begin_cell()
                     .store_slice(owner)
-                    .store_ref(name)
-                    .store_ref(uri)
+                    .store_uint(level, 8)
+                    ;; it seems sandbox has a bug parsing messages with three refs and state init block
+                    .store_ref(
+                            begin_cell()
+                                    .store_ref(name)
+                                    .store_ref(uri)
+                                    .store_ref(parents.end_cell())
+                            .end_cell()
+                    )
                     .end_cell();
             deploy_nft_item(storage::nft::next_item_index, storage::nft::nft_entity_code,
                     deploy_amount_ton, nft_content);

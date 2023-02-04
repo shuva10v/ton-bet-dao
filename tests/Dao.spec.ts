@@ -25,18 +25,20 @@ describe('DAO', () => {
         const nftEntityAddress = await dao.getNftAddress(collectionData.nextItemIndex);
         expect((await bundle.blkch.getContract(nftEntityAddress)).accountState?.type).toBe('uninit')
 
-
+        console.log(dao.address) // EQDQ2P53QvsxgJuD0jhSw8d7BUiI97nikiusmZKS2HuH9mrx
+        console.log((await bundle.nftEntity(0n)).address) // EQBoJjRQSnKvqZp16m1qdzDl4-_N5B09HaAtwVqwc0KL4Cha
         const transferResult = await user1Wallet.sendTransfer(user1.getSender(), {
             amount: toNano("1000.0"), // default price
+            totalValue: toNano('0.1'),
             destination: dao.address,
-            totalValue: toNano("0.1"),
-            forwardTonAmount: toNano("0.05"),
+            forwardTonAmount: toNano('0.05'),
             forwardPayload: bundle.dao.buyEntityPayload({
                     level: NFTEntityLevel.Level0,
                     name: "Football",
                     uri: "ipfs://default_metadata_value",
-                    itemIndex: collectionData.nextItemIndex
+                    itemIndex: collectionData.nextItemIndex,
                 })
+
         })
         expectTransactionsValid(transferResult)
         expect(transferResult.transactions).toHaveLength(5)
@@ -55,15 +57,10 @@ describe('DAO', () => {
         expect(nftData.index).toBe(0n)
         expect(nftData.ownerAddress?.equals(user1.address)).toBeTruthy()
 
-        expect(nftData.individualContent.beginParse().loadUint(8)).toBe(0); // on-chain layout
-        const dict = nftData.individualContent.beginParse().loadRef().beginParse()
-            .loadDictDirect(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
-        const uri = dict.get(NFTEntity.METADATA_KEY_URI);
-        const name = dict.get(NFTEntity.METADATA_KEY_NAME);
-        expect(uri).toBeDefined()
-        expect(name).toBeDefined()
-        expect(name.beginParse().loadStringTail()).toBe("Football")
-        expect(uri.beginParse().loadStringTail()).toBe("ipfs://default_metadata_value")
+        expect(nftData.layout).toBe(0); // on-chain layout
+        expect(nftData.name).toBe("Football")
+        expect(nftData.uri).toBe("ipfs://default_metadata_value")
+        expect(nftData.level).toBe(NFTEntityLevel.Level0)
 
         collectionData = await dao.getCollectionData()
         expect(collectionData.nextItemIndex).toBe(1n);
@@ -116,7 +113,7 @@ describe('DAO', () => {
             forwardPayload: bundle.dao.buyEntityPayload({
                     level: NFTEntityLevel.Level0,
                     name: "Football",
-                    itemIndex: 0n  // wrong item index
+                    itemIndex: 0n
                 })
         })
 
@@ -134,11 +131,86 @@ describe('DAO', () => {
     })
 
     test('should allow editing metadata', async () => {
-        // TODO
+        const bundle = await ContractsBundle.create()
+        const user1 = await bundle.blkch.treasury("user1")
+        const user1Wallet = await bundle.addBetToUser(user1, toNano('2000'))
+
+        await user1Wallet.sendTransfer(user1.getSender(), {
+            amount: toNano("1000.0"), // default price
+            destination: bundle.dao.address,
+            totalValue: toNano("0.1"),
+            forwardTonAmount: toNano("0.05"),
+            forwardPayload: bundle.dao.buyEntityPayload({
+                level: NFTEntityLevel.Level0,
+                uri: "ipfs://link1",
+                name: "Football",
+                itemIndex: 0n
+            })
+        })
+
+        const nftEntity = await bundle.nftEntity(0n);
+        let nftData = await nftEntity.getData()
+        expect(nftData.name).toBe("Football")
+        expect(nftData.uri).toBe("ipfs://link1")
+
+        const transferRes = await nftEntity.sendEditContent(user1.getSender(), {
+            uri: "ipfs://link2"
+        })
+        expectTransactionsValid(transferRes)
+
+        nftData = await nftEntity.getData()
+        expect(nftData.name).toBe("Football")
+        expect(nftData.uri).toBe("ipfs://link2")
     })
 
     test('should allow link NFT entities between levels', async () => {
-        // TODO
+        const bundle = await ContractsBundle.create()
+        const user1 = await bundle.blkch.treasury("user1")
+        const user1Wallet = await bundle.addBetToUser(user1, toNano('2000'))
+
+        expectTransactionsValid(await user1Wallet.sendTransfer(user1.getSender(), {
+            amount: toNano("1000.0"), // default price
+            destination: bundle.dao.address,
+            totalValue: toNano("0.1"),
+            forwardTonAmount: toNano("0.05"),
+            forwardPayload: bundle.dao.buyEntityPayload({
+                level: NFTEntityLevel.Level0,
+                uri: "ipfs://level0_link1",
+                name: "Football",
+                itemIndex: 0n
+            })
+        }))
+
+        const nftLevel0 = await bundle.nftEntity(0n);
+        let nftData = await nftLevel0.getData()
+        expect(nftData.name).toBe("Football")
+        expect(nftData.uri).toBe("ipfs://level0_link1")
+        expect(nftData.level).toBe(NFTEntityLevel.Level0)
+        expect(nftData.level0Parent).toBeUndefined()
+        expect(nftData.level1Parent).toBeUndefined()
+
+        expectTransactionsValid(await user1Wallet.sendTransfer(user1.getSender(), {
+            amount: toNano("1000.0"), // default price
+            destination: bundle.dao.address,
+            totalValue: toNano("0.1"),
+            forwardTonAmount: toNano("0.05"),
+            forwardPayload: bundle.dao.buyEntityPayload({
+                level: NFTEntityLevel.Level1,
+                uri: "ipfs://level1_link1",
+                name: "FIFA - World",
+                itemIndex: 1n,
+                parentLevel0: nftLevel0.address
+            })
+        }))
+
+        const nftLevel1 = await bundle.nftEntity(1n);
+        nftData = await nftLevel1.getData()
+        expect(nftData.name).toBe("FIFA - World")
+        expect(nftData.uri).toBe("ipfs://level1_link1")
+        expect(nftData.level).toBe(NFTEntityLevel.Level1)
+        expect(nftData.level0Parent).not.toBeUndefined()
+        expect(nftData.level0Parent?.equals(nftLevel0.address)).toBeTruthy()
+        expect(nftData.level1Parent).toBeUndefined()
     })
 
 })

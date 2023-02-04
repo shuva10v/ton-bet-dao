@@ -2,7 +2,7 @@
   "name": "ton-bet-dao",
   "version": "1.0.0",
   "devDependencies": {
-    "@ton-community/sandbox": "^0.2.0",
+    "@ton-community/sandbox": "^0.2.1",
     "@ton-community/test-utils": "^0.0.1",
     "@ton-community/func-js": "^0.4.0",
     "@types/jest": "^29.2.5",

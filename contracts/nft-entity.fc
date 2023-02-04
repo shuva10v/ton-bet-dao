@@ -17,6 +17,9 @@ int op::report_static_data() asm "0x8b771735 PUSHINT";
 
 const int METADATA_KEY_URI = 51065135818459385347574250312853146822620586594996463797054414300406918686668;
 const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894456860693970539822503415433;
+const int METADATA_KEY_LEVEL = 228748789187412400415878024685729699334331275676571924130290804107165375190;
+const int METADATA_KEY_LINK_LEVEL0 = 52980425894522696122450762830976993059324876111996366402384618068875577391515;
+const int METADATA_KEY_LINK_LEVEL1 = 95186537016895908399999252342660077910834077423773537655532550116721965180327;
 
 ;;
 ;;  Storage
@@ -28,24 +31,27 @@ const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894
 ;;  cell uri
 ;;
 
-(int, int, slice, slice, cell, cell) load_data() {
+(int, int, slice, slice, int, cell, cell, cell) load_data() {
     slice ds = get_data().begin_parse();
     var (index, collection_address) = (ds~load_uint(64), ds~load_msg_addr());
     if (ds.slice_bits() > 0) {
-        return (-1, index, collection_address, ds~load_msg_addr(), ds~load_ref(), ds~load_ref());
+        return (-1, index, collection_address, ds~load_msg_addr(), ds~load_uint(8), ds~load_ref(),
+                ds~load_ref(), ds~load_ref());
     } else {
-        return (0, index, collection_address, null(), null(), null()); ;; nft not initialized yet
+        return (0, index, collection_address, null(), -1, null(), null(), null()); ;; nft not initialized yet
     }
 }
 
-() store_data(int index, slice collection_address, slice owner_address, cell name, cell uri) impure {
+() store_data(int index, slice collection_address, slice owner_address, int level, cell name, cell uri, cell parents) impure {
     set_data(
             begin_cell()
                     .store_uint(index, 64)
                     .store_slice(collection_address)
                     .store_slice(owner_address)
+                    .store_uint(level, 8)
                     .store_ref(name)
                     .store_ref(uri)
+                    .store_ref(parents)
                     .end_cell()
     );
 }
@@ -66,8 +72,8 @@ const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894
     send_raw_message(msg.end_cell(), send_mode);
 }
 
-() transfer_ownership(int my_balance, int index, slice collection_address, slice owner_address, cell name, cell uri,
-        slice sender_address, int query_id, slice in_msg_body, int fwd_fees) impure inline {
+() transfer_ownership(int my_balance, int index, slice collection_address, slice owner_address, int level, cell name,
+        cell uri, cell parents, slice sender_address, int query_id, slice in_msg_body, int fwd_fees) impure inline {
     throw_unless(401, equal_slices(sender_address, owner_address));
 
     slice new_owner_address = in_msg_body~load_msg_addr();
@@ -95,10 +101,11 @@ const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894
         send_msg(response_destination, rest_amount, op::excesses(), query_id, null(), 1); ;; paying fees, revert on errors
     }
 
-    store_data(index, collection_address, new_owner_address, name, uri);
+    store_data(index, collection_address, new_owner_address, level, name, uri, parents);
 }
 
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+;;     throw(1000);
     if (in_msg_body.slice_empty?()) { ;; ignore empty messages
         return ();
     }
@@ -117,13 +124,16 @@ const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894
     cs~load_coins(); ;; skip ihr_fee
     int fwd_fee = muldiv(cs~load_coins(), 3, 2); ;; we use message fwd_fee for estimation of forward_payload costs
 
-    (int init?, int index, slice collection_address, slice owner_address, cell name, cell uri) = load_data();
+    (int init?, int index, slice collection_address, slice owner_address, int level, cell name, cell uri, cell parents) = load_data();
     if (~ init?) {
         throw_unless(405, equal_slices(collection_address, sender_address));
         slice owner = in_msg_body~load_msg_addr();
-        name = in_msg_body~load_ref();
-        uri = in_msg_body~load_ref();
-        store_data(index, collection_address, owner, name, uri);
+        level = in_msg_body~load_uint(8);
+        slice refs = in_msg_body~load_ref().begin_parse();
+        name = refs~load_ref();
+        uri = refs~load_ref();
+        parents = refs~load_ref();
+        store_data(index, collection_address, owner, level, name, uri, parents);
         return ();
     }
 
@@ -131,18 +141,18 @@ const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894
     int query_id = in_msg_body~load_uint(64);
 
     if (op == op::transfer()) {
-        transfer_ownership(my_balance, index, collection_address, owner_address, name, uri, sender_address, query_id, in_msg_body, fwd_fee);
+        transfer_ownership(my_balance, index, collection_address, owner_address, level, name, uri, parents, sender_address,
+                query_id, in_msg_body, fwd_fee);
         return ();
     }
     if (op == op::get_static_data()) {
-        send_msg(sender_address, 0, op::report_static_data(), query_id, begin_cell().store_uint(index, 256).store_slice(collection_address), 64);  ;; carry all the remaining value of the inbound message
+        send_msg(sender_address, 0, op::report_static_data(), query_id, begin_cell().store_uint(index, 256)
+                .store_slice(collection_address), 64);  ;; carry all the remaining value of the inbound message
         return ();
     }
     if (op == op::edit_content()) {
-        throw(700);
-        ;; TODO add support
         throw_unless(410, equal_slices(sender_address, owner_address));
-;;         store_data(index, collection_address, owner_address, in_msg_body~load_ref());
+        store_data(index, collection_address, owner_address, level, name, in_msg_body~load_ref(), parents);
         return ();
     }
     throw(0xffff);
@@ -153,10 +163,16 @@ const int METADATA_KEY_NAME = 59089242681608890680090686026688704441792375738894
 ;;
 
 (int, int, slice, slice, cell) get_nft_data() method_id {
-    (int init?, int index, slice collection_address, slice owner_address, cell name, cell uri) = load_data();
+    (int init?, int index, slice collection_address, slice owner_address, int level, cell name, cell uri, cell parents) = load_data();
     cell res = new_dict(); ;; semi-chain layout
     res~udict_set_ref(256, METADATA_KEY_URI, uri);
     res~udict_set_ref(256, METADATA_KEY_NAME, name);
+    res~udict_set_ref(256, METADATA_KEY_LEVEL, begin_cell().store_uint(level, 8).end_cell());
+    slice parents_slice = parents.begin_parse();
+    if (parents_slice.slice_bits()) {
+        res~udict_set_ref(256, METADATA_KEY_LINK_LEVEL0, begin_cell()
+                .store_slice(parents_slice~load_msg_addr()).end_cell());
+    }
     return (init?, index, collection_address, owner_address, begin_cell()
             .store_uint(0, 8) ;; on-chain layout
             .store_ref(res).end_cell()); ;; append dict
